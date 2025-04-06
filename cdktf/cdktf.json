@@ -1,0 +1,11 @@
+{
+  "language": "typescript",
+  "app": "npx ts-node main.ts",
+  "projectId": "ct-toru",
+  "sendCrashReports": "false",
+  "terraformProviders": [
+    "google@~> 14.0"
+  ],
+  "terraformModules": [],
+  "context": {}
+}
