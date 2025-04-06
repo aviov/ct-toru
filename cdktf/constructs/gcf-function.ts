@@ -1,5 +1,5 @@
 import { Construct } from "constructs";
-import { Cloudfunctions2Function, Cloudfunctions2FunctionEventTrigger } from "@cdktf/provider-google/lib/cloudfunctions2-function";
+import { Cloudfunctions2Function } from "@cdktf/provider-google/lib/cloudfunctions2-function";
 import { StorageBucket } from "@cdktf/provider-google/lib/storage-bucket";
 
 interface GcfFunctionOptions {
@@ -33,24 +33,16 @@ export class GcfFunction extends Construct {
                 availableMemory: "256MB",
                 timeoutSeconds: 540, // 9 minutes
             },
-        });
 
-        if (options.triggerBucket) {
-            new Cloudfunctions2FunctionEventTrigger(this, "gcs-trigger", {
-                functionId: this.fn.id,
-                eventType: "google.cloud.storage.object.v1.finalize",
+            eventTrigger: options.triggerBucket ? {
+                eventType: "google.cloud.storage.object.v1.finalized",
                 eventFilters: [
                     { attribute: "bucket", value: options.triggerBucket.name }
                 ]
-            });
-        }
-
-        if (options.triggerTopic) {
-            new Cloudfunctions2FunctionEventTrigger(this, "pubsub-trigger", {
-                functionId: this.fn.id,
+            } : options.triggerTopic ? {
                 eventType: "google.cloud.pubsub.topic.v1.messagePublished",
-                pubsubTopic: options.triggerTopic,
-            });
-        }
+                pubsubTopic: options.triggerTopic
+            } : undefined
+        });
     }
 }
