@@ -10,6 +10,7 @@ interface GcfFunctionOptions {
     triggerBucket?: StorageBucket;
     triggerTopic?: string;
     roles?: string[];
+    environmentVariables?: Record<string, string>;
 }
 
 export class GcfFunction extends Construct {
@@ -45,7 +46,8 @@ export class GcfFunction extends Construct {
                 availableMemory: "256M",
                 timeoutSeconds: 540,
                 environmentVariables: {
-                    "GOOGLE_FUNCTION_SOURCE": options.sourceDir
+                    "GOOGLE_FUNCTION_SOURCE": options.sourceDir,
+                    ...(options.environmentVariables || {})
                 },
                 serviceAccountEmail: this.serviceAccount.email, // Explicitly set the service account
             },

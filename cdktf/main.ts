@@ -82,28 +82,48 @@ class MyStack extends TerraformStack {
     new GcfFunction(this, "ingest-audio", {
       name: "ingest-audio",
       sourceDir: "../gcf/ingest-audio",
-      roles: FUNCTION_ROLES["ingest-audio"]
+      roles: FUNCTION_ROLES["ingest-audio"],
+      environmentVariables: {
+        "API_URL": "https://api.example.com/audio-files",
+        "BUCKET_NAME": "ct-toru-audio-input"
+        // API_KEY should be stored in Secret Manager in production
+      }
     });
 
     new GcfFunction(this, "transcribe-audio", {
       name: "transcribe-audio",
       sourceDir: "../gcf/transcribe-audio",
       triggerBucket: audioInputBucket.bucket,
-      roles: FUNCTION_ROLES["transcribe-audio"]
+      roles: FUNCTION_ROLES["transcribe-audio"],
+      environmentVariables: {
+        "INPUT_BUCKET": audioInputBucket.bucket.name,
+        "OUTPUT_TOPIC": orderConfirmedTopic.topic.id,
+        "LANGUAGE_CODE": "en-US"
+      }
     });
 
     new GcfFunction(this, "match-customer", {
       name: "match-customer",
       sourceDir: "../gcf/match-customer",
       triggerTopic: orderConfirmedTopic.topic.id,
-      roles: FUNCTION_ROLES["match-customer"]
+      roles: FUNCTION_ROLES["match-customer"],
+      environmentVariables: {
+        "CUSTOMER_API_URL": "https://api.example.com/customers",
+        "OUTPUT_TOPIC": customerMatchedTopic.topic.id,
+        "STORAGE_BUCKET": transcriptionsBucket.bucket.name
+      }
     });
 
     new GcfFunction(this, "create-order", {
       name: "create-order",
       sourceDir: "../gcf/create-order",
       triggerTopic: customerMatchedTopic.topic.id,
-      roles: FUNCTION_ROLES["create-order"]
+      roles: FUNCTION_ROLES["create-order"],
+      environmentVariables: {
+        "ORDER_API_URL": "https://api.example.com/orders",
+        "OUTPUT_TOPIC": orderConfirmedTopic.topic.id,
+        "STORAGE_BUCKET": customerMatchesBucket.bucket.name
+      }
     });
 
 
