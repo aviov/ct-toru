@@ -2,40 +2,70 @@ import { Construct } from "constructs";
 import {
   App,
   TerraformStack,
-  TerraformOutput
+  TerraformOutput,
+  GcsBackend,
+  // RemoteBackend,
+  // CloudBackend,
+  // NamedCloudWorkspace
 } from "cdktf";
 import { GoogleProvider } from "@cdktf/provider-google/lib/provider";
 import { GcsBucket } from "./constructs/gcs-bucket";
 import { PubSubTopic } from "./constructs/pubsub-topic";
 import { GcfFunction } from "./constructs/gcf-function";
 
+const FUNCTION_ROLES: { [key: string]: string[] } = {
+    "ingest-audio": [
+      "roles/storage.objectAdmin" // Upload MP3s to GCS
+    ],
+    "transcribe-audio": [
+      "roles/storage.objectViewer", // Read MP3s, write transcriptions
+      "roles/pubsub.publisher", // Publish to order-confirmed
+      "roles/speech.user" // Use Speech-to-Text
+    ],
+    "match-customer": [
+      "roles/storage.objectViewer", // Read transcriptions, write customer matches
+      "roles/pubsub.subscriber", // Subscribe to order-confirmed
+      "roles/pubsub.publisher" // Publish to customer-matched
+    ],
+    "create-order": [
+      "roles/storage.objectViewer", // Read customer matches, write orders
+      "roles/pubsub.subscriber" // Subscribe to customer-matched
+    ]
+};
+
 class MyStack extends TerraformStack {
   constructor(scope: Construct, id: string) {
     super(scope, id);
+    
+    new GcsBackend(this, {
+      bucket: "ct-toru-tfstate",
+      prefix: "terraform/state",
+    });
 
     new GoogleProvider(this, "google", {
       project: "ct-toru",
       region: "europe-west1",
     });
 
+    // Storage
     const audioInputBucket = new GcsBucket(this, "audio-input", {
       name: "ct-toru-audio-input",
-      location: "EU",
+      location: "europe-west1",
     });
 
     const transcriptionsBucket = new GcsBucket(this, "transcriptions", {
       name: "ct-toru-transcriptions",
-      location: "EU",
+      location: "europe-west1",
     });
 
     const customerMatchesBucket = new GcsBucket(this, "customer-matches", {
       name: "ct-toru-customer-matches",
-      location: "EU",
+      location: "europe-west1",
     });
 
     const ordersBucket = new GcsBucket(this, "orders", {
       name: "ct-toru-orders",
-      location: "EU",
+      location: "europe-west1",
     });
 
 
@@ -51,25 +81,29 @@ class MyStack extends TerraformStack {
 
     new GcfFunction(this, "ingest-audio", {
       name: "ingest-audio",
-      sourceDir: "../gcf/ingest-audio"
+      sourceDir: "../gcf/ingest-audio",
+      roles: FUNCTION_ROLES["ingest-audio"]
     });
 
     new GcfFunction(this, "transcribe-audio", {
       name: "transcribe-audio",
       sourceDir: "../gcf/transcribe-audio",
       triggerBucket: audioInputBucket.bucket,
+      roles: FUNCTION_ROLES["transcribe-audio"]
     });
 
     new GcfFunction(this, "match-customer", {
       name: "match-customer",
       sourceDir: "../gcf/match-customer",
       triggerTopic: orderConfirmedTopic.topic.id,
+      roles: FUNCTION_ROLES["match-customer"]
     });
 
     new GcfFunction(this, "create-order", {
       name: "create-order",
       sourceDir: "../gcf/create-order",
       triggerTopic: customerMatchedTopic.topic.id,
+      roles: FUNCTION_ROLES["create-order"]
     });
 
 

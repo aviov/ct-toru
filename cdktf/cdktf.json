@@ -4,7 +4,7 @@
   "projectId": "ct-toru",
   "sendCrashReports": "false",
   "terraformProviders": [
-    "google@~> 14.0"
+    "google@~> 5.0"
   ],
   "terraformModules": [],
   "context": {}
