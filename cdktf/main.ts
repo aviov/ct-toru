@@ -15,21 +15,26 @@ import { GcfFunction } from "./constructs/gcf-function";
 
 const FUNCTION_ROLES: { [key: string]: string[] } = {
     "ingest-audio": [
-      "roles/storage.objectAdmin" // Upload MP3s to GCS
+      "roles/storage.objectAdmin", // Upload MP3s to GCS
+      "roles/secretmanager.secretAccessor" // Access secrets
     ],
     "transcribe-audio": [
       "roles/storage.objectViewer", // Read MP3s, write transcriptions
+      "roles/storage.objectUser", // Access transcriptions
       "roles/pubsub.publisher", // Publish to order-confirmed
-      "roles/speech.user" // Use Speech-to-Text
+      "roles/speech.user", // Use Speech-to-Text
+      "roles/secretmanager.secretAccessor" // Access secrets
     ],
     "match-customer": [
       "roles/storage.objectViewer", // Read transcriptions, write customer matches
       "roles/pubsub.subscriber", // Subscribe to order-confirmed
-      "roles/pubsub.publisher" // Publish to customer-matched
+      "roles/pubsub.publisher", // Publish to customer-matched
+      "roles/secretmanager.secretAccessor" // Access secrets
     ],
     "create-order": [
       "roles/storage.objectViewer", // Read customer matches, write orders
-      "roles/pubsub.subscriber" // Subscribe to customer-matched
+      "roles/pubsub.subscriber", // Subscribe to customer-matched
+      "roles/secretmanager.secretAccessor" // Access secrets
     ]
 };
 
@@ -82,28 +87,60 @@ class MyStack extends TerraformStack {
     new GcfFunction(this, "ingest-audio", {
       name: "ingest-audio",
       sourceDir: "../gcf/ingest-audio",
-      roles: FUNCTION_ROLES["ingest-audio"]
+      roles: FUNCTION_ROLES["ingest-audio"],
+      environmentVariables: {
+        "BUCKET_NAME": "ct-toru-audio-input",
+        "PROJECT_ID": "ct-toru",
+        "CALL_CENTER_API_KEY_SECRET": "ct-toru-call-center-api-key",
+        "CALL_CENTER_API_URL_SECRET": "ct-toru-call-center-api-url"
+      }
     });
 
     new GcfFunction(this, "transcribe-audio", {
       name: "transcribe-audio",
       sourceDir: "../gcf/transcribe-audio",
       triggerBucket: audioInputBucket.bucket,
-      roles: FUNCTION_ROLES["transcribe-audio"]
+      roles: FUNCTION_ROLES["transcribe-audio"],
+      environmentVariables: {
+        "INPUT_BUCKET": audioInputBucket.bucket.name,
+        "OUTPUT_BUCKET": transcriptionsBucket.bucket.name,
+        "OUTPUT_TOPIC": orderConfirmedTopic.topic.id,
+        "LANGUAGE_CODE_SECRET_ID": "ct-toru-language-code",
+        "OPENAI_API_KEY_SECRET_ID": "ct-toru-openai-api-key",
+        "PROJECT_ID": "ct-toru"
+      }
     });
 
     new GcfFunction(this, "match-customer", {
       name: "match-customer",
       sourceDir: "../gcf/match-customer",
       triggerTopic: orderConfirmedTopic.topic.id,
-      roles: FUNCTION_ROLES["match-customer"]
+      roles: FUNCTION_ROLES["match-customer"],
+      environmentVariables: {
+        "OUTPUT_TOPIC": customerMatchedTopic.topic.id,
+        "STORAGE_BUCKET": transcriptionsBucket.bucket.name,
+        "PROJECT_ID": "ct-toru",
+        "CRM_USERNAME_SECRET": "ct-toru-crm-username",
+        "CRM_PASSWORD_SECRET": "ct-toru-crm-password",
+        "CRM_AUTH_URL_SECRET": "ct-toru-crm-auth-url",
+        "CRM_API_URL_SECRET": "ct-toru-crm-api-url"
+      }
     });
 
     new GcfFunction(this, "create-order", {
       name: "create-order",
       sourceDir: "../gcf/create-order",
       triggerTopic: customerMatchedTopic.topic.id,
-      roles: FUNCTION_ROLES["create-order"]
+      roles: FUNCTION_ROLES["create-order"],
+      environmentVariables: {
+        "OUTPUT_TOPIC": orderConfirmedTopic.topic.id,
+        "STORAGE_BUCKET": customerMatchesBucket.bucket.name,
+        "PROJECT_ID": "ct-toru",
+        "CRM_USERNAME_SECRET": "ct-toru-crm-username",
+        "CRM_PASSWORD_SECRET": "ct-toru-crm-password",
+        "CRM_AUTH_URL_SECRET": "ct-toru-crm-auth-url",
+        "CRM_API_URL_SECRET": "ct-toru-crm-create-order-url"
+      }
     });
 
 
