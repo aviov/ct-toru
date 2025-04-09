@@ -41,7 +41,7 @@ Environment variables are set in the CDKTF stack via the `environmentVariables` 
 **Environment Variables**:
 - `INPUT_BUCKET`: GCS bucket containing audio files
 - `OUTPUT_TOPIC`: Pub/Sub topic to publish transcription results
-- `LANGUAGE_CODE`: Language code for transcription (e.g., "en-US")
+- `LANGUAGE_CODE`: Language code for transcription (e.g., "et-EE")
 
 **Purpose**: Uses Google's Speech-to-Text API to transcribe audio files and publishes the results to a Pub/Sub topic.
 
@@ -50,8 +50,10 @@ Environment variables are set in the CDKTF stack via the `environmentVariables` 
 **Trigger**: Pub/Sub message (transcription complete)
 
 **Environment Variables**:
-- `CUSTOMER_API_URL`: URL of the customer API
-- `CUSTOMER_API_KEY`: API key for customer service
+- `CRM_AUTH_URL_SECRET`: Secret reference for authentication URL
+- `CRM_API_URL_SECRET`: Secret reference for API URL
+- `CRM_USERNAME_SECRET`: Secret reference for username
+- `CRM_PASSWORD_SECRET`: Secret reference for password
 - `OUTPUT_TOPIC`: Pub/Sub topic to publish customer match results
 - `STORAGE_BUCKET`: GCS bucket to store customer match data
 
@@ -62,8 +64,10 @@ Environment variables are set in the CDKTF stack via the `environmentVariables` 
 **Trigger**: Pub/Sub message (customer matched)
 
 **Environment Variables**:
-- `ORDER_API_URL`: URL of the order API
-- `ORDER_API_KEY`: API key for order service
+- `CRM_AUTH_URL_SECRET`: Secret reference for authentication URL
+- `CRM_API_URL_SECRET`: Secret reference for API URL
+- `CRM_USERNAME_SECRET`: Secret reference for username
+- `CRM_PASSWORD_SECRET`: Secret reference for password
 - `OUTPUT_TOPIC`: Pub/Sub topic for order confirmation
 - `STORAGE_BUCKET`: GCS bucket to store order data
 
@@ -80,6 +84,7 @@ const FUNCTION_ROLES: { [key: string]: string[] } = {
     ],
     "transcribe-audio": [
       "roles/storage.objectViewer", // Read MP3s, write transcriptions
+      "roles/storage.objectUser", // Access transcriptions
       "roles/pubsub.publisher", // Publish to order-confirmed
       "roles/speech.user" // Use Speech-to-Text
     ],

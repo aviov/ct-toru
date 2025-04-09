@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # List of functions
-FUNCTIONS=("ingest-audio" "transcribe-audio" "match-customer" "create-order")
+# FUNCTIONS=("ingest-audio" "transcribe-audio" "match-customer" "create-order")
+FUNCTIONS=("transcribe-audio")
 
 # Build and zip each function
 for FUNCTION in "${FUNCTIONS[@]}"; do
@@ -10,31 +11,38 @@ for FUNCTION in "${FUNCTIONS[@]}"; do
     # Navigate to the function directory
     cd gcf/$FUNCTION
 
-    # Copy the shared Dockerfile
-    cp ../Dockerfile .
-
-    # Build the Docker image
-    docker build -t $FUNCTION .
-
-    # Run a container to extract the files
-    docker run -d --name $FUNCTION-container $FUNCTION sleep infinity
-
-    # Copy the application files and dependencies
-    docker cp $FUNCTION-container:/app/main.py .
-    docker cp $FUNCTION-container:/app/requirements.txt .
-    docker cp $FUNCTION-container:/app/venv/lib/python3.11/site-packages site-packages
-
-    # Create the zip file
-    zip -r $FUNCTION.zip main.py requirements.txt site-packages
-
+    # Create a temporary directory for packaging
+    mkdir -p tmp_package
+    
+    # Copy local files directly (instead of from Docker)
+    cp main.py tmp_package/
+    cp requirements.txt tmp_package/
+    
+    # Install dependencies in a virtual environment for packaging
+    python3 -m venv tmp_venv
+    source tmp_venv/bin/activate
+    pip install --upgrade pip
+    pip install -r requirements.txt
+    
+    # Create site-packages directory and copy dependencies
+    mkdir -p tmp_package/site-packages
+    pip freeze > tmp_package/requirements-freeze.txt
+    
+    # Instead of copying from Docker, we'll install directly to a temp directory
+    pip install -r requirements.txt --target tmp_package/site-packages
+    
+    # Create the zip file from our local files
+    cd tmp_package
+    zip -r ../$FUNCTION.zip main.py requirements.txt site-packages
+    cd ..
+    
     # Upload the zip file to GCS
     gsutil cp $FUNCTION.zip gs://$FUNCTION-source/
-
+    
     # Clean up
-    docker stop $FUNCTION-container
-    docker rm $FUNCTION-container
-    rm -rf site-packages $FUNCTION.zip Dockerfile
-
+    rm -rf tmp_package tmp_venv $FUNCTION.zip
+    deactivate
+    
     cd ../..
 done
 

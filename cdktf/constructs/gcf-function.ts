@@ -26,7 +26,7 @@ export class GcfFunction extends Construct {
         });
 
         this.fn = new Cloudfunctions2Function(this, "function", {
-            name: options.name,
+            name: `${options.name}-${new Date().toISOString().replace(/[-:.]/g, '')}`,
             location: "europe-west1",
             buildConfig: {
                 runtime: "python311", // Use Python 3.11 for all functions
@@ -40,6 +40,9 @@ export class GcfFunction extends Construct {
                         }).name,
                         object: `${options.name}.zip`,
                     },
+                },
+                environmentVariables: {
+                    "DEPLOY_TIMESTAMP": new Date().toISOString(),
                 },
             },
             serviceConfig: {
@@ -76,10 +79,10 @@ export class GcfFunction extends Construct {
                 
                 // Skip roles that are not supported at project level
                 if (fullRoleName === 'roles/speech.user') {
-                    console.warn(`Skipping role ${fullRoleName} as it's not supported at project level`);
+                    console.warn(`Skipping role ${fullRoleName} as it's not supported at project level. ` + 
+                                 `This permission needs to be granted separately via the Google Cloud Speech API.`);
                     return;
-                }
-                
+                }                
                 // Create a project-level IAM binding for the service account
                 new ProjectIamMember(this, `iam-${cleanRole}-${index}`, {
                     project: "ct-toru",

@@ -91,3 +91,7 @@ ehthumbs.db
 
 # GCP credentials
 ct-toru-1185615b0ee5.json
+
+# data incl. test data
+data/
+scripts_unused/

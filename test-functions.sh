@@ -7,10 +7,10 @@ echo "Testing Cloud Functions..."
 PROJECT_ID="ct-toru"
 REGION="europe-west1"
 FUNCTIONS=(
-    "ingest-audio"
+    # "ingest-audio"
     "transcribe-audio"
-    "match-customer"
-    "create-order"
+    # "match-customer"
+    # "create-order"
 )
 
 # Test HTTP functions with a simple GET request
