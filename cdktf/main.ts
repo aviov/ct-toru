@@ -27,6 +27,7 @@ const FUNCTION_ROLES: { [key: string]: string[] } = {
     ],
     "match-customer": [
       "roles/storage.objectViewer", // Read transcriptions, write customer matches
+      "roles/storage.objectCreator", // Write customer matches
       "roles/pubsub.subscriber", // Subscribe to order-confirmed
       "roles/pubsub.publisher", // Publish to customer-matched
       "roles/secretmanager.secretAccessor" // Access secrets
@@ -120,6 +121,8 @@ class MyStack extends TerraformStack {
         "OUTPUT_TOPIC": customerMatchedTopic.topic.id,
         "STORAGE_BUCKET": transcriptionsBucket.bucket.name,
         "PROJECT_ID": "ct-toru",
+        "USE_LLM": "true",
+        "LLM_PRIMARY": "true",
         "CRM_USERNAME_SECRET": "ct-toru-crm-username",
         "CRM_PASSWORD_SECRET": "ct-toru-crm-password",
         "CRM_AUTH_URL_SECRET": "ct-toru-crm-auth-url",
