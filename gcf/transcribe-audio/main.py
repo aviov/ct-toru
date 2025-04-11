@@ -12,6 +12,7 @@ import requests
 import time
 from urllib.parse import urljoin
 import base64
+from pydub import AudioSegment
 
 # Environment variables
 PROJECT_ID = os.environ.get("PROJECT_ID")
@@ -24,6 +25,27 @@ OPENAI_API_KEY_SECRET_ID = os.environ.get("OPENAI_API_KEY_SECRET_ID", "ct-toru-o
 # Audio file extensions to process
 AUDIO_EXTENSIONS = ['mp3', 'wav', 'flac', 'm4a', 'ogg']
 
+# Keyword mappings for Toruabi services to include in the prompt
+SERVICE_KEYWORDS = {
+    "Ummistuse likvideerimine": ["ummistus", "ummistuse", "likvideerimine", "tõkke", "ummistunud"],
+    "Hooldustööd": ["hooldus", "hooldustööd", "hoolduse", "korras", "kontroll"],
+    "Santehnilised tööd": ["santehnilised", "santehnika", "torutööd", "toru", "veetoru", "veetoruleke"],
+    "Elektritööd": ["elektritööd", "elekter", "elektri", "juhe", "vool"],
+    "Survepesu": ["survepesu", "pesu", "surve", "puhastus", "suurvabesutööd"],
+    "Gaasitööd": ["gaasitööd", "gaas", "gaasi"],
+    "Keevitustööd": ["keevitustööd", "keevitus", "keevita"],
+    "Kaameravaatlus": ["kaameravaatlus", "kaamera", "vaatlus", "inspektsioon"],
+    "Lekkeotsing gaasiga": ["lekkeotsing", "leke", "gaasiga", "gaasileke"],
+    "Ehitustööd": ["ehitustööd", "ehitus", "ehituse", "renoveerimine"],
+    "Rasvapüüdja tühjendus kuni 4m3": ["rasvapüüdja", "tühjendus", "rasva", "4m3"],
+    "Muu": ["muu", "teine", "misc", "other"],
+    "Freesimistööd": ["freesimistööd", "freesimine", "frees"],
+    "Majasiseste kanalisatsioonitrasside pesu": ["kanalisatsioonitrasside", "kanalisatsioon", "pesu", "majasiseste"],
+    "Fekaalivedu (1 koorem = kuni 5 m3)": ["fekaalivedu", "fekaal", "koorem", "5 m3"],
+    "Hinnapakkumise küsimine": ["hinnapakkumine", "hinnapakkumise", "pakkumine", "hind"],
+    "Väljakutse tasu": ["väljakutse", "tasu", "teenustasu"]
+}
+
 def access_secret(project_id: str, secret_id: str, version_id: str) -> str:
     """
     Access the secret from Secret Manager.
@@ -32,6 +54,23 @@ def access_secret(project_id: str, secret_id: str, version_id: str) -> str:
     name = f"projects/{project_id}/secrets/{secret_id}/versions/{version_id}"
     response = client.access_secret_version(request={"name": name})
     return response.payload.data.decode("UTF-8")
+
+def preprocess_audio(audio_file_path):
+    """Pre-process the audio to improve quality."""
+    audio = AudioSegment.from_file(audio_file_path)
+    print(f"Raw audio duration: {len(audio) / 1000} seconds")
+    # Convert to mono
+    audio = audio.set_channels(1)
+    # Resample to 16kHz
+    audio = audio.set_frame_rate(16000)
+    # Normalize volume
+    audio = audio.normalize()
+    # Remove silence
+    # audio = audio.strip_silence(silence_len=500, silence_thresh=-50, padding=100)
+    processed_path = audio_file_path + "_processed.mp3"
+    audio.export(processed_path, format="mp3")
+    print(f"Processed audio duration: {len(audio) / 1000} seconds")
+    return processed_path
 
 def post_process_estonian_transcript(text):
     """
@@ -44,19 +83,25 @@ def post_process_estonian_transcript(text):
         r'\bnais[dt]a\b,?\s+t': 'naiste t',
         r'\bpovastada\b': 'puhastada',
         r'\bpoastada\b': 'puhastada',
+        r'\bpohastada\b': 'puhastada',
         r'\bkeskmus\b': 'kestnud',
         r'\baast\w+ (kuu|6)\b': 'kell 6',
         r'\bajastad\w+\b': 'ajast',
         r'\bantsi[dt]\b': 'andsite',
         r'\bkena\b': 'kena',
         r'\bAga kena\b': 'Väga kena',
+        r'\bPagab kanna\b': 'Väga kena',
         r'\bOotake\b': 'Oodake',
-        r'\bMa votake okka\b': 'Oodake hetk',
+        r'\bVõidake õks\b': 'Oodake hetk',
         r'\bummistusegimine\b': 'ummistus',
         r'\bmenname\b': 'jõuame',
+        r'\bjõua menna\b': 'jõuame enne',
         r'\bsuurvabesutööd\b': 'survepesu',
+        r'\bsuurvabesutööti\b': 'survepesutööd',
         r'\bpeavast\b': 'päevast',
         r'\bKummikrofi\b': 'Kummiprofi',
+        r'\bViinsi\b': 'Viimsi',
+        r'\bViimasi\b': 'Viimsi',
         r'\bGoldmindo\b': 'Goldmind',
         r'\bGoldmint\b': 'Goldmind',
         r'\bvannidupa\b': 'vannituppa',
@@ -64,12 +109,32 @@ def post_process_estonian_transcript(text):
         r'\bKuidas 329\b': 'Kunderi 329',
         r'\bkaha võõlem\b': 'kaua võõrad',
         r'\btervista\b': 'tervist',
+        r'\bTervistelistan\b': 'Tervist, helistan',
         r'\bmenna\b': 'enne',
         r'\bveedoru\b': 'veetoru',
         r'\blõpinguline\b': 'lepinguline',
-        r'\bKuidas\b': 'Kunderi',
+        r'\bTallikade 17\b': 'Tallinna tee 14',  # Based on context
+        r'\bKuidas\b': 'kuidas',  # Remove incorrect replacement
         r'\bümselt\b': 'ümber',
-        r'\bvööda radiust\b': 'teine võõras radius'
+        r'\bkeevad meil aeg ajal tooltulas\b': 'käivad meil aeg-ajalt hooldamas',
+        r'\bniiks renn\b': 'siin üks renn',
+        # r'\bvööda radiust\b': 'veebruar',
+        r'\bvaatan\b': 'just vaatan',  # Context-specific correction
+        r'\bAijandi\b': 'Aiandi',
+        r'\bhaabneeme\b': 'Haabneeme',
+        r'\bliivapüüdipuhastus\b': 'liivapüüdja puhastus',
+        r'\bkõtega\b': 'kas',
+        r'\bsiva\b': 'siia',
+        r'\belatavaliselt\b': 'ettevalmistavalt',
+        r'\bvapustel\b': 'vapustav',
+        r'\bnimipeal\b': 'nimi peal',
+        r'\bsobi västi\b': 'sobib hästi',
+        r'\bedistab\b': 'edastab',
+        r'\btänavlik\b': 'tänulik',
+        r'\bkenapäeva\b': 'kena päeva',
+        r'\bnäge vist\b': 'nägemist',
+        r'\bT-(\d+)\b': r'tee \1',  # Replace "T-24" with "tee 24"
+        # r'\bMarili Torin\b': 'Marili Torim'
     }
     
     # Apply corrections
@@ -83,6 +148,86 @@ def post_process_estonian_transcript(text):
     
     return text
 
+def post_process_with_openai(api_key, raw_transcript):
+    """Post-process the transcript using OpenAI Chat API to correct errors."""
+    OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions"
+    
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    
+    # Prompt for post-processing
+    post_process_prompt = (
+        "You are an expert in Estonian language and the domain of plumbing services. "
+        "The following text is a transcription of a phone call to a plumbing company (Toruabi) in Estonian. "
+        "The transcription may contain errors due to speech recognition issues. Your task is to: "
+        "1. Correct any misrecognized words or phrases, especially those related to plumbing services. "
+        "2. Remove any repeated phrases that are likely due to transcription errors (e.g., the same phrase repeated multiple times). "
+        "3. Ensure the text is coherent and natural in Estonian, preserving the original meaning as much as possible. "
+        "4. If a term matches a Toruabi service, ensure it is written correctly (e.g., 'suurvabesutööd' should be 'survepesu'). "
+        "5. **Preserve proper nouns such as names of people, companies, and street names unless they are clearly incorrect** (e.g., 'Marili Torim', 'Aiandi tee 24', 'Viimsi Kummiprofi' are correct and should not be changed). "
+        "6. **Correct addresses to follow Estonian conventions**: Replace 'T' with 'tee' in street names (e.g., 'Liiva T61' should be 'Liiva tee 61'). Ensure the address format is correct (e.g., 'street name' followed by 'number'). "
+        "7. **Do not add new conversational elements that were not in the original transcript** (e.g., do not add 'Kas on veel midagi, millega saame aidata?' or 'Selge' unless they were present). "
+        "8. **Avoid changing minor stylistic variations unless they are clearly incorrect** (e.g., do not change 'mõtev' to 'mõtlete' or 'sobi västi' to 'sobib hästi' unless the original is grammatically incorrect). "
+        "9. **Format the output with single newlines between conversational turns, without extra empty lines** (e.g., 'Line 1\nLine 2\nLine 3'). "
+        "Here are the valid Toruabi services: Ummistuse likvideerimine, Hooldustööd, Santehnilised tööd, Elektritööd, "
+        "Survepesu, Gaasitööd, Keevitustööd, Kaameravaatlus, Lekkeotsing gaasiga, Ehitustööd, "
+        "Rasvapüüdja tühjendus kuni 4m3, Muu, Freesimistööd, Majasiseste kanalisatsioonitrasside pesu, "
+        "Fekaalivedu (1 koorem = kuni 5 m3), Hinnapakkumise küsimine, Väljakutse tasu. "
+        "Here is the raw transcript to correct:\n\n"
+        f"{raw_transcript}\n\n"
+        "Provide the corrected transcript in Estonian."
+    )
+    
+    payload = {
+        "model": "gpt-4o",  # Use gpt-4o for better language understanding
+        "messages": [
+            {"role": "system", "content": "You are a helpful assistant for correcting Estonian transcriptions."},
+            {"role": "user", "content": post_process_prompt}
+        ],
+        "temperature": 0.0,
+        "max_tokens": 1000
+    }
+    
+    try:
+        response = requests.post(OPENAI_CHAT_URL, headers=headers, json=payload, timeout=30)
+        response.raise_for_status()
+        result = response.json()
+        corrected_transcript = result["choices"][0]["message"]["content"].strip()
+        print(f"Corrected transcript from OpenAI Chat API: {corrected_transcript}")
+        return corrected_transcript
+    except Exception as e:
+        print(f"Error in OpenAI Chat API post-processing: {str(e)}")
+        return raw_transcript  # Fallback to raw transcript if the API call fails
+
+def generate_estonian_prompt():
+    """Generate a prompt for Whisper API with Toruabi service keywords."""
+    base_prompt = (
+        "See on helisalvestis toruettevõtte klienditeenindusele. Räägitakse eesti keeles ja teemaks "
+        "on toruabi tellimine, ummistus, või santehnilised tööd. Võimalikud fraasid: "
+        "\"Toruabi, tere\", \"Tervist, helistan\", \"helistan Tiskre Prismast\", \"naiste tualettruumis on ummistus\", "
+        "\"kanalisatsiooniga on mingi jama\", \"santehnilised tööd\", \"hooldustööd\", \"survepesu\", "
+        "\"elektritööd\", \"puhastada\", \"kestnud nädal aega\", \"Palun öelge täpne aadress\", "
+        "\"kuidas teie nimi on\", \"Oodake hetk\", \"ma saan rääkida\", \"kell kuue ja kaheksa vahel\", "
+        "\"tõenäoliselt jõuame enne\", \"Väga kena\", \"Teeme nii\", \"Aitäh\", \"kanalisatsioonitrasside pesu\", "
+        "\"veetoruleke\", \"vannituppa ei lähe vesi alla\", \"kraanikausi alt\", \"Tallinnas\", "
+        "\"ei midagi, te andsite kogu informatsiooni\", \"hetkel saan rääkida\", \"meil on siin üks renn\", "
+        "\"viimati on käinud teine veebruar, just vaatan\", \"sooviksime palun tellida\", \"mis aadressist me räägime\", "
+        "\"kontaktiks oma telefon\", \"ja arvesaaja on\", \"super, väga tänulik teile\", \"kena päeva\", \"nägemist\". "
+        "Inimeste nimed: \"Marili Torim\", \"Keio Tismus\", \"Laura\", \"Jaanus\". "
+        "Aadressid: \"Liiva tee 61\", \"Aiandi tee 24\", \"Tallikade 14\", \"Kunderi 329\", \"Peterburi tee 90F\", "
+        "\"Tartu maantee\". Ettevõtted: \"Tiskre Prisma\", \"Viimsi Kummiprofi\", \"GF Annapolis\", \"Goldmind\"."
+    )
+    
+    # Add service-related keywords
+    service_keywords = []
+    for service, keywords in SERVICE_KEYWORDS.items():
+        service_keywords.extend(keywords)
+    service_keywords_str = ", ".join(f"\"{keyword}\"" for keyword in service_keywords)
+    
+    return f"{base_prompt} Võimalikud teenused ja märksõnad: {service_keywords_str}."
+
 def call_openai_api_with_retries(api_key, audio_file_path, language_code):
     """Call OpenAI API directly using requests with retries for better network reliability"""
     OPENAI_API_URL = "https://api.openai.com/v1/audio/transcriptions"
@@ -95,21 +240,16 @@ def call_openai_api_with_retries(api_key, audio_file_path, language_code):
     headers = {
         "Authorization": f"Bearer {api_key}"
     }
+
+    # Pre-process the audio
+    processed_audio_path = preprocess_audio(audio_file_path)
     
     # Read the audio file as binary
-    with open(audio_file_path, "rb") as file:
+    with open(processed_audio_path, "rb") as file:
         audio_data = file.read()
     
     # Create prompt with Estonian plumbing/service terminology to improve recognition
-    estonian_prompt = (
-        "See on helisalvestis toruettevõtte klienditeenindusele. Räägitakse eesti keeles ja teemaks "
-        "on toruabi tellimine, ummistus, või santehnilised tööd. Võimalikud fraasid: "
-        "\"Toru abi, tere\", \"helistan Tiskre Prismast\", \"naiste tualettruumis\", \"ummistuse likvideerimine\", "
-        "\"kanalisatsioon\", \"santehnilised tööd\", \"hooldustööd\", \"Liiva tee 61\", \"puhastada\", "
-        "\"kestnud nädal aega\", \"Öelge palun täpne aadress\", \"kuidas teie nimi on\", \"Oodake hetk\", "
-        "\"ma saan rääkida\", \"kell kuue ja kaheksa vahel\", \"tõenäoliselt jõuame enne\", \"Väga kena\", \"Teeme nii\", \"Aitäh\"."
-        "Inimeste nimed: \"Marili Torim\"."
-    )
+    estonian_prompt = generate_estonian_prompt()
     
     # Prepare the request payload with enhanced options
     files = {
@@ -141,10 +281,14 @@ def call_openai_api_with_retries(api_key, audio_file_path, language_code):
                 raw_text = result["text"]
                 
                 # Apply domain-specific corrections
-                final_text = post_process_estonian_transcript(raw_text)
+                corrected_text = post_process_estonian_transcript(raw_text)
+
+                # Further post-process with OpenAI Chat API
+                final_text = post_process_with_openai(api_key, corrected_text)
                 
                 # Print both for debugging
                 print(f"Raw transcript from API: {raw_text}")
+                print(f"After correction map: {corrected_text}")
                 print(f"Final processed transcript: {final_text}")
                 
                 return final_text
@@ -250,7 +394,7 @@ def main(cloud_event):
             # Check for order confirmation or work request in more ways
             order_confirmed = any(phrase.lower() in transcript.lower() for phrase in 
                                  ["tellimus", "tellida", "on kinnitatud", "order confirmed", 
-                                  "sooviks tellida"])
+                                  "sooviks tellida", "tellimus on kinnitatud"])
             
             # Check for specific work types mentioned in the transcript
             work_type_mentioned = False
@@ -265,7 +409,8 @@ def main(cloud_event):
                 print(f"Detected work types: {matched_work_types}")
                 
             # If order confirmed or work type mentioned, consider it a valid order
-            if order_confirmed or work_type_mentioned:
+            # if order_confirmed or work_type_mentioned:
+            if order_confirmed:
                 # Publish to Pub/Sub
                 publisher = pubsub_v1.PublisherClient()
                 topic_path = publisher.topic_path(PROJECT_ID, OUTPUT_TOPIC.split('/')[-1])
