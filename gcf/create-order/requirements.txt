@@ -5,3 +5,4 @@ google-cloud-secret-manager==2.*
 grpcio==1.66.1
 grpcio-tools==1.66.1
 requests==2.32.3
+openai==1.12.0

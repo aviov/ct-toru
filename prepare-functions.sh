@@ -2,7 +2,7 @@
 
 # List of functions
 # FUNCTIONS=("ingest-audio" "transcribe-audio" "match-customer" "create-order")
-FUNCTIONS=("transcribe-audio" "match-customer")
+FUNCTIONS=("ingest-audio" "transcribe-audio" "match-customer" "create-order")
 
 # Build and zip each function
 for FUNCTION in "${FUNCTIONS[@]}"; do
