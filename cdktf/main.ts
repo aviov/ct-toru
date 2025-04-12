@@ -34,6 +34,7 @@ const FUNCTION_ROLES: { [key: string]: string[] } = {
     ],
     "create-order": [
       "roles/storage.objectViewer", // Read customer matches, write orders
+      "roles/storage.objectCreator", // Write customer matches
       "roles/pubsub.subscriber", // Subscribe to customer-matched
       "roles/secretmanager.secretAccessor" // Access secrets
     ]
@@ -126,7 +127,8 @@ class MyStack extends TerraformStack {
         "CRM_USERNAME_SECRET": "ct-toru-crm-username",
         "CRM_PASSWORD_SECRET": "ct-toru-crm-password",
         "CRM_AUTH_URL_SECRET": "ct-toru-crm-auth-url",
-        "CRM_API_URL_SECRET": "ct-toru-crm-api-url"
+        "CRM_API_URL_SECRET": "ct-toru-crm-api-url",
+        "OPENAI_API_KEY_SECRET_ID": "ct-toru-openai-api-key"
       }
     });
 
@@ -139,10 +141,13 @@ class MyStack extends TerraformStack {
         "OUTPUT_TOPIC": orderConfirmedTopic.topic.id,
         "STORAGE_BUCKET": customerMatchesBucket.bucket.name,
         "PROJECT_ID": "ct-toru",
+        "USE_LLM": "true",
+        "LLM_PRIMARY": "true",
         "CRM_USERNAME_SECRET": "ct-toru-crm-username",
         "CRM_PASSWORD_SECRET": "ct-toru-crm-password",
         "CRM_AUTH_URL_SECRET": "ct-toru-crm-auth-url",
-        "CRM_API_URL_SECRET": "ct-toru-crm-create-order-url"
+        "CRM_API_URL_SECRET": "ct-toru-crm-create-order-url",
+        "OPENAI_API_KEY_SECRET_ID": "ct-toru-openai-api-key"
       }
     });
 
