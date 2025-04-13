@@ -108,10 +108,14 @@ def extract_customer_info_with_openai(transcript_content: str) -> Dict[str, Any]
             '  "name": "customer contact person name",\n'
             '  "companyName": "company name",\n'
             '  "companyRegCode": "company registration code if mentioned",\n'
-            '  "email": "email address if mentioned"\n'
+            '  "email": "email address if mentioned",\n'
+            '  "customerType": "either ERAKLIENT (if personal customer) or ETTEVÕTE (if business customer)"\n'
             "}\n\n"
             "IMPORTANT: Only include these exact fields. Do not add any additional fields, explanations, or text. "
-            "If information is not present in the transcript, use null for that field."
+            "If information is not present in the transcript, use null for that field. "
+            "For customerType, determine whether the caller is a personal customer (ERAKLIENT) or business customer (ETTEVÕTE) "
+            "based on context clues like whether they mention a company name, use formal business language, "
+            "or identify themselves as a company representative."
         )
         
         # Prepare the request payload
@@ -204,12 +208,26 @@ def extract_customer_info_with_regex(transcript_content: str) -> Dict[str, str]:
     phone_pattern = re.compile(r'\b(?:\+372[- ]?|8[- ]?)?(?:\d{3,4}[- ]?\d{3,4}|\d{7,8})\b')
     phone_matches = phone_pattern.findall(transcript_content)
     
+    # Determine customer type based on keywords and patterns
+    company_indicators = ['firma', 'ettevõte', 'ettevõtte', 'äriühing', 'organisatsioon', 'OÜ', 'AS', 'FIE', 'registrikood']
+    personal_indicators = ['eraklient', 'erakliendid', 'eraisik', 'kodune', 'kodus', 'korter', 'korterisse', 'pere', 'isiklik']
+    
+    # Count indicators for both types
+    company_count = sum(1 for indicator in company_indicators if indicator.lower() in transcript_content.lower())
+    personal_count = sum(1 for indicator in personal_indicators if indicator.lower() in transcript_content.lower())
+    
+    # Default to ETTEVÕTE if company is mentioned, otherwise ERAKLIENT
+    customer_type = "ERAKLIENT"
+    if company_count > personal_count or company_matches:
+        customer_type = "ETTEVÕTE"
+    
     # Log extracted information
     print(f"Regex extracted emails: {email_matches}")
     print(f"Regex extracted companies: {company_matches}")
     print(f"Regex extracted addresses: {address_matches}")
     print(f"Regex extracted names: {name_matches}")
     print(f"Regex extracted phones: {phone_matches}")
+    print(f"Regex determined customer type: {customer_type}")
     
     # Determine the best phone number to use
     best_phone = None  # Don't default to caller
@@ -246,6 +264,9 @@ def extract_customer_info_with_regex(transcript_content: str) -> Dict[str, str]:
         # Clean up name (remove leading/trailing whitespace, normalize spaces)
         contact_name = re.sub(r'\s+', ' ', name_matches[0].strip())
         results["name"] = contact_name
+    
+    # Add customer type
+    results["customerType"] = customer_type
     
     return results
 
@@ -320,7 +341,7 @@ def main(cloud_event):
         # Create the full payload with the required customerType
         payload = {
             "lookupCriteria": lookup_criteria,
-            "customerType": "ETTEVÕTE"  # As per documentation, this is a required field
+            "customerType": lookup_criteria.get("customerType", "ETTEVÕTE")  # Use extracted type or default to ETTEVÕTE
         }
         
         # Authenticate with the CRM
@@ -487,10 +508,19 @@ def main(cloud_event):
             # Extract just the filename if it contains a path
             customer_match_file = customer_match_file.split("/")[-1]
             
+        # Include the extraction data in the output for downstream processing
+        output_data = {
+            "customerDetails": customer_data,
+            "id": customer_data.get("id", f"unknown-{caller}"),
+            "openai_extraction": llm_data,  # Include OpenAI extraction results
+            "lookup_criteria": lookup_criteria,  # Include the combined extraction criteria
+            "customerFound": "customerFound" in customer_response and customer_response["customerFound"]
+        }
+            
         storage_client = storage.Client()
         match_bucket = storage_client.bucket(STORAGE_BUCKET)
         match_blob = match_bucket.blob(f"customer_matches/{customer_match_file}")
-        match_blob.upload_from_string(json.dumps(customer_data))
+        match_blob.upload_from_string(json.dumps(output_data))
         
         print(f"Customer match stored at: gs://{STORAGE_BUCKET}/customer_matches/{customer_match_file}")
         

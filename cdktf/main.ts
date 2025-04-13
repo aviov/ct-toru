@@ -3,10 +3,7 @@ import {
   App,
   TerraformStack,
   TerraformOutput,
-  GcsBackend,
-  // RemoteBackend,
-  // CloudBackend,
-  // NamedCloudWorkspace
+  GcsBackend
 } from "cdktf";
 import { GoogleProvider } from "@cdktf/provider-google/lib/provider";
 import { GcsBucket } from "./constructs/gcs-bucket";
@@ -143,6 +140,7 @@ class MyStack extends TerraformStack {
         "PROJECT_ID": "ct-toru",
         "USE_LLM": "true",
         "LLM_PRIMARY": "true",
+        "USE_TEST_ENDPOINT": "false",
         "CRM_USERNAME_SECRET": "ct-toru-crm-username",
         "CRM_PASSWORD_SECRET": "ct-toru-crm-password",
         "CRM_AUTH_URL_SECRET": "ct-toru-crm-auth-url",

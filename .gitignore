@@ -6,6 +6,7 @@ __pycache__/
 .Python
 env/
 venv/
+.venv/
 ENV/
 env.bak/
 venv.bak/
@@ -95,3 +96,4 @@ ct-toru-1185615b0ee5.json
 # data incl. test data
 data/
 scripts_unused/
+scripts_python/
